@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0a7d4f"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png"><title>تاجر - إدارة الطلبات</title>
+<style>
+:root{--bg:#f4f6f8;--c:#fff;--t:#1b1f24;--m:#667;--p:#0a7d4f;--b:#dde1e6;--bst:#e6f6ee;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171a;--c:#1e2327;--t:#eceff1;--m:#9aa5ad;--b:#333b41;--p:#2ecc8f;--bst:#183326}}
+:root[data-theme="dark"]{--bg:#14171a;--c:#1e2327;--t:#eceff1;--m:#9aa5ad;--b:#333b41;--p:#2ecc8f;--bst:#183326}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--t);font-family:Tahoma,Arial,sans-serif;font-size:16px}
+nav{display:flex;gap:6px;overflow-x:auto;padding:8px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5}
+.tab{white-space:nowrap;border:1px solid var(--b);background:var(--c);color:var(--t);border-radius:20px;padding:8px 14px}
+.tab.on{background:var(--p);color:#fff;border-color:var(--p)}
+main{padding:8px 10px 40px;max-width:640px;margin:auto}
+.card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:10px;margin:8px 0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:5px 0}
+.row.best{background:var(--bst);border-radius:8px;padding:5px}
+input,select{width:100%;box-sizing:border-box;padding:10px;margin:4px 0;border:1px solid var(--b);border-radius:8px;background:var(--bg);color:var(--t);font-size:16px}
+button,.btn{border:1px solid var(--b);background:var(--c);color:var(--t);border-radius:8px;padding:9px 12px;font-size:15px;text-decoration:none;display:inline-block}
+.pri{background:var(--p);color:#fff;border-color:var(--p)}
+.x{color:#c0392b}
+small{color:var(--m)}h3{margin:12px 0 4px}
+table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--b);padding:6px;text-align:right}
+textarea{width:100%;height:140px;box-sizing:border-box;background:var(--bg);color:var(--t);border:1px solid var(--b);border-radius:8px}
+#toast{display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:20px;z-index:9}
+@media print{.np,#toast{display:none!important}body{background:#fff;color:#000}.card{border:0;background:#fff;color:#000}td,th{color:#000}}
+</style></head><body>
+<div id="app"></div><div id="toast"></div>
+<script>
+let db={products:[],suppliers:[],clients:[],orders:[]},tab='orders',sel={},view=null,armed='',draft={cid:'',items:[]};
+try{const s=localStorage.getItem('tajer');if(s)db=JSON.parse(s)}catch(e){}
+const save=()=>{try{localStorage.setItem('tajer',JSON.stringify(db))}catch(e){}};
+const $=i=>document.getElementById(i);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const g=(a,id)=>a.find(x=>x.id===id);
+const fmt=n=>(+n||0).toLocaleString('en',{maximumFractionDigits:2});
+const best=p=>p.prices.length?p.prices.reduce((a,b)=>b.price<a.price?b:a):null;
+const tot=o=>o.items.reduce((s,i)=>s+i.qty*i.price,0);
+const tel=n=>n?`<a class="btn" href="tel:${esc(n)}">📞 ${esc(n)}</a>`:'';
+const isU=l=>/^https?:\/\//i.test(String(l||'').trim());
+const locTxt=l=>isU(l)?'':esc(l);
+const map=l=>{l=String(l||'').trim();if(!l)return '';const u=isU(l)?l:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(l);return `<a class="btn" target="_blank" rel="noopener" href="${esc(u)}">📍 خريطة</a>`};
+function flt(v){v=v.toLowerCase();document.querySelectorAll('[data-f]').forEach(e=>e.style.display=e.textContent.toLowerCase().includes(v)?'':'none')}
+function fsel(v){$('ip').innerHTML=db.products.filter(p=>p.name.includes(v)).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+const wa=n=>{n=String(n||'').replace(/\D/g,'');return n.startsWith('0')?'20'+n.slice(1):n};
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2200)}
+function add(k,f){const o={id:uid()};for(const x of f)o[x]=$(k+'_'+x).value.trim();if(!o[f[0]])return toast('اكتب الاسم أولاً');if(k==='products')o.prices=[];db[k].push(o);save();render()}
+function del(k,id){if(armed!==id){armed=id;render();return}armed='';db[k]=db[k].filter(x=>x.id!==id);if(k==='suppliers')db.products.forEach(p=>p.prices=p.prices.filter(x=>x.sid!==id));save();render()}
+function addPrice(pid){const sid=$('s'+pid).value,pr=+$('p'+pid).value;if(!sid||!(pr>0))return toast('اختر التاجر واكتب السعر');const p=g(db.products,pid);p.prices=p.prices.filter(x=>x.sid!==sid);p.prices.push({sid,price:pr});save();render()}
+function addItem(){const pid=$('ip').value,q=+$('iq').value;if(!pid||!(q>0))return toast('اختر المنتج والكمية');const p=g(db.products,pid),b=best(p);const pr=+$('ipr').value||(b?b.price:0);draft.items.push({pid,qty:q,price:pr});render()}
+function saveOrder(){if(!draft.cid||!draft.items.length)return toast('اختر العميل وأضف أصناف');db.orders.push({id:uid(),cid:draft.cid,date:new Date().toLocaleDateString('en-GB'),items:draft.items});draft={cid:'',items:[]};save();render()}
+function form(k,fields,ph,title){return `<div class="card"><h3>${title}</h3>${fields.map((f,i)=>`<input id="${k}_${f}" placeholder="${ph[i]}" ${f==='phone'?'type="tel" inputmode="tel"':''}>`).join('')}<button class="pri" onclick="add('${k}',${JSON.stringify(fields).replace(/"/g,'&quot;')})">➕ إضافة</button></div>`}
+const delBtn=(k,id)=>`<button class="x" onclick="del('${k}','${id}')">${armed===id?'تأكيد الحذف؟':'🗑'}</button>`;
+const V={
+orders(){
+ const cl='<option value="">— اختر العميل —</option>'+db.clients.map(c=>`<option value="${c.id}" ${c.id===draft.cid?'selected':''}>${esc(c.name)}</option>`).join('');
+ const pr=db.products.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+ const it=draft.items.map((i,k)=>`<div class="row"><span>${esc(g(db.products,i.pid)?.name)}</span><span>${i.qty} × ${fmt(i.price)}</span><button class="x" onclick="draft.items.splice(${k},1);render()">✖</button></div>`).join('');
+ const list=[...db.orders].reverse().map(o=>{const c=g(db.clients,o.cid);return `<div class="card" data-f><div class="row"><label><input type="checkbox" style="width:auto" ${sel[o.id]?'checked':''} onchange="sel['${o.id}']=this.checked"> <b>${esc(c?.name||'—')}</b></label><b>${fmt(tot(o))}</b></div><small>${o.date} · ${o.items.length} صنف</small><div class="row"><button onclick="view='${o.id}';render()">🧾 الفاتورة</button>${delBtn('orders',o.id)}</div></div>`}).join('');
+ return `<div class="card"><h3>طلب جديد</h3><select onchange="draft.cid=this.value">${cl}</select>${it}<input placeholder="🔎 ابحث عن منتج" oninput="fsel(this.value)"><select id="ip">${pr}</select><input id="iq" type="number" inputmode="numeric" placeholder="الكمية"><input id="ipr" type="number" inputmode="decimal" placeholder="سعر البيع للعميل (فارغ = أرخص سعر شراء)"><button onclick="addItem()">➕ أضف الصنف</button> <button class="pri" onclick="saveOrder()">💾 احفظ الطلب</button></div><h3>الطلبات <small>(علّم ✔ على الفواتير اللي عايز تدمجها)</small></h3><button class="pri" onclick="tab='run';render()">🚚 ادمج المحدد في رحلة شراء</button>${list||'<div class="card"><small>لا توجد طلبات بعد</small></div>'}`},
+run(){
+ const os=db.orders.filter(o=>sel[o.id]);
+ if(!os.length)return '<div class="card">علّم ✔ على فواتير من تبويب الطلبات ثم ارجع هنا.</div>';
+ const agg={};os.forEach(o=>o.items.forEach(i=>agg[i.pid]=(agg[i.pid]||0)+i.qty));let total=0;
+ const rows=Object.entries(agg).map(([pid,q])=>{const p=g(db.products,pid),b=p&&best(p),s=b&&g(db.suppliers,b.sid),cost=b?b.price*q:0;total+=cost;return `<div class="card"><b>${esc(p?.name)}</b> — الكمية <b>${q}</b><div class="row"><span>${s?esc(s.name)+' '+locTxt(s.loc):'⚠️ لا يوجد سعر'}</span><b>${fmt(cost)}</b>${s?tel(s.phone)+map(s.loc):''}</div></div>`}).join('');
+ const stops=os.map(o=>{const c=g(db.clients,o.cid);return `<div class="row"><span>${esc(c?.name)} <small>${locTxt(c?.addr)}</small></span>${tel(c?.phone)}${map(c?.addr)}</div>`}).join('');
+ return `<h3>🛒 قائمة الشراء (${os.length} فاتورة مدموجة)</h3>${rows}<div class="card"><b>إجمالي تكلفة الشراء: ${fmt(total)}</b></div><h3>📍 محطات التوصيل</h3><div class="card">${stops}</div><button onclick="sel={};render()">إلغاء التحديد</button>`},
+products(){
+ const sup=db.suppliers.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+ return form('products',['name'],['اسم المنتج (مثال: بيبسي علبة)'],'منتج جديد')+db.products.map(p=>{const b=best(p);
+ const pr=[...p.prices].sort((a,c)=>a.price-c.price).map(x=>{const s=g(db.suppliers,x.sid);if(!s)return '';const bb=b&&x.sid===b.sid;return `<div class="row ${bb?'best':''}"><span>${bb?'⭐ ':''}${esc(s.name)} <small>${locTxt(s.loc)}</small></span><b>${fmt(x.price)}</b>${tel(s.phone)}${map(s.loc)}</div>`}).join('');
+ return `<div class="card" data-f><div class="row"><b>${esc(p.name)}</b>${delBtn('products',p.id)}</div>${pr||'<small>لا توجد أسعار</small>'}<select id="s${p.id}">${sup}</select><input id="p${p.id}" type="number" inputmode="decimal" placeholder="السعر"><button onclick="addPrice('${p.id}')">حفظ السعر</button></div>`}).join('')},
+suppliers(){return form('suppliers',['name','phone','loc'],['اسم تاجر الجملة','رقم التليفون','الموقع (الصق رابط جوجل ماب أو اكتب العنوان)'],'تاجر جديد')+db.suppliers.map(s=>`<div class="card" data-f><div class="row"><b>${esc(s.name)}</b>${delBtn('suppliers',s.id)}</div><small>${locTxt(s.loc)}</small><div>${tel(s.phone)} ${map(s.loc)}</div></div>`).join('')},
+clients(){return form('clients',['name','phone','addr'],['اسم الكشك / السوبر ماركت','رقم التليفون','العنوان (أو الصق رابط جوجل ماب)'],'عميل جديد')+db.clients.map(c=>`<div class="card" data-f><div class="row"><b>${esc(c.name)}</b>${delBtn('clients',c.id)}</div><small>${locTxt(c.addr)}</small><div>${tel(c.phone)} ${map(c.addr)}</div></div>`).join('')},
+backup(){return `<div class="card"><h3>💾 نسخة احتياطية</h3><small>اضغط "انسخ" وابعت النص لنفسك على واتساب. للاسترجاع: الصق النص واضغط "استرجع".</small><textarea id="bk">${esc(JSON.stringify(db))}</textarea><button class="pri" onclick="try{navigator.clipboard.writeText($('bk').value);toast('تم النسخ ✔')}catch(e){$('bk').select()}">📋 انسخ</button> <button onclick="try{db=JSON.parse($('bk').value);save();toast('تم الاسترجاع ✔');render()}catch(e){toast('النص غير صحيح')}">♻️ استرجع</button></div>`}};
+const T=[['orders','📋 الطلبات'],['run','🚚 رحلة الشراء'],['products','📦 المنتجات'],['suppliers','🏭 التجار'],['clients','🏪 العملاء'],['backup','💾 نسخة']];
+function bill(){const o=g(db.orders,view),c=g(db.clients,o.cid)||{};
+ const rows=o.items.map(i=>`<tr><td>${esc(g(db.products,i.pid)?.name)}</td><td>${i.qty}</td><td>${fmt(i.price)}</td><td>${fmt(i.qty*i.price)}</td></tr>`).join('');
+ const txt='فاتورة\nالعميل: '+(c.name||'')+'\n'+o.items.map(i=>`${g(db.products,i.pid)?.name} ${i.qty} × ${fmt(i.price)}`).join('\n')+`\nالإجمالي: ${fmt(tot(o))} جنيه`;
+ return `<main><div class="np row"><button onclick="view=null;render()">⬅ رجوع</button><button class="pri" onclick="window.print()">🖨 حفظ PDF</button><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${wa(c.phone)}?text=${encodeURIComponent(txt)}">🟢 واتساب</a></div><div class="card"><h2>فاتورة</h2><p>العميل: <b>${esc(c.name)}</b><br>التاريخ: ${o.date}</p><table><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr>${rows}</table><h3>الإجمالي: ${fmt(tot(o))} جنيه</h3></div></main>`}
+function render(){
+ if(view&&g(db.orders,view)){$('app').innerHTML=bill();return}
+ view=null;
+ $('app').innerHTML=`<nav class="np">${T.map(([k,l])=>`<button class="tab ${k===tab?'on':''}" onclick="tab='${k}';render()">${l}</button>`).join('')}</nav><main>${['products','suppliers','clients','orders'].includes(tab)?'<input placeholder="🔎 بحث" oninput="flt(this.value)">':''}${V[tab]()}</main>`}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+render();
+</script></body></html>
